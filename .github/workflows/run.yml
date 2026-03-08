@@ -1,28 +1,57 @@
-name: Run Python Script
+name: Cricket Tracker
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # Run manually from Actions tab
   schedule:
-    - cron: "*/10 * * * *"
+    - cron: "*/30 * * * *"  # Run every 30 minutes
 
 jobs:
-  run-script:
+  run:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 9
+    
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v3
-
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
       - name: Setup Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.10"
-
-      - name: Install dependencies
+      
+      - name: Install Chrome
         run: |
-          pip install playwright
-          playwright install
-          pip install requests
-
-      - name: Run script
-        run: python cricket_tracker_fixed.py
+          wget -q -O - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add -
+          sudo sh -c 'echo "deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main" >> /etc/apt/sources.list.d/google-chrome.list'
+          sudo apt-get update -qq
+          sudo apt-get install -y google-chrome-stable xvfb
+      
+      - name: Install Python packages
+        run: pip install selenium webdriver-manager requests
+      
+      - name: Run tracker
+        env:
+          DISPLAY: ':99'
+        run: |
+          # Start virtual display for Chrome
+          Xvfb :99 -screen 0 1920x1080x24 &
+          sleep 2
+          
+          # Create input file with your configuration
+          cat > input.txt << 'EOF'
+          y
+          ${{ secrets.POLY_URL }}
+          ${{ secrets.YOSO_URL }}
+          
+          
+          y
+          EOF
+          
+          # Run the script with automatic inputs
+          timeout 520 python cricket_tracker_fixed.py < input.txt || true
+          
+      - name: Cleanup
+        if: always()
+        run: |
+          pkill chrome || true
+          pkill Xvfb || true
