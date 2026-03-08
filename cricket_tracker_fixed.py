@@ -1831,6 +1831,60 @@ def setup_custom(tmp_driver) -> dict | None:
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+#  AUTO-CONFIGURATION (for GitHub Actions)
+# ══════════════════════════════════════════════════════════════════════════════
+
+# Set AUTO_MODE=1 environment variable to skip all prompts and use these defaults
+AUTO_CONFIG = {
+    "poly_url": "https://polymarket.com/sports/crint/crint-ind-nzl-2026-03-08",
+    "yoso_url": "https://yoso.fun/markets/0x9c9334c0f5c07ace2aa1f1f5fbfe95a79c0e03f6",
+    "team1_label": "India",
+    "team2_label": "New Zealand",
+    "yoso_team1": "IND",
+    "yoso_team2": "NZ",
+    "market_name": "India vs New Zealand",
+    "threshold": ALERT_THRESHOLD,
+    "whale_alerts": True,
+}
+
+def get_auto_config() -> dict:
+    """Create config from hardcoded defaults - no user interaction needed."""
+    slug = urlparse(AUTO_CONFIG["poly_url"]).path.strip("/").split("/")[-1]
+    
+    # Build team keys for matching
+    def make_keys(name: str) -> list:
+        words = name.lower().split()
+        keys  = [name.lower(), words[0]]
+        if len(words) > 1:
+            keys.append(words[-1])
+        keys.append("".join(w[0] for w in words))
+        return list(set(keys))
+    
+    t1_keys = make_keys(AUTO_CONFIG["team1_label"])
+    t2_keys = make_keys(AUTO_CONFIG["team2_label"])
+    
+    cfg = {
+        "name"        : AUTO_CONFIG["market_name"],
+        "poly_url"    : AUTO_CONFIG["poly_url"],
+        "yoso_url"    : AUTO_CONFIG["yoso_url"],
+        "poly_slug"   : slug,
+        "team1_keys"  : t1_keys,
+        "team2_keys"  : t2_keys,
+        "team1_label" : AUTO_CONFIG["team1_label"],
+        "team2_label" : AUTO_CONFIG["team2_label"],
+        "yoso_team1"  : AUTO_CONFIG["yoso_team1"],
+        "yoso_team2"  : AUTO_CONFIG["yoso_team2"],
+        "threshold"   : AUTO_CONFIG["threshold"],
+    }
+    
+    print(f"\n  ✓ {cfg['name']}")
+    print(f"  T1: {cfg['team1_label']} [{cfg['yoso_team1']}]   T2: {cfg['team2_label']} [{cfg['yoso_team2']}]")
+    print(f"  Arb alert ≤ ${cfg['threshold']}  |  Whale alert > ${WHALE_THRESHOLD}")
+    print()
+    
+    return cfg
+
+# ══════════════════════════════════════════════════════════════════════════════
 #  ENTRY POINT
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -1846,24 +1900,37 @@ def main():
     print(sep)
     print()
 
-    # Whale alert toggle
+    # Check if running in AUTO_MODE (for GitHub Actions)
+    AUTO_MODE = os.getenv("AUTO_MODE", "0") == "1"
+    
     global WHALE_ALERTS_ENABLED
-    wa = input("  Enable whale alerts? (buy > $2 on Yoso) [y/n, Enter=y]: ").strip().lower()
-    WHALE_ALERTS_ENABLED = (wa != "n")
-    whale_status = f"{CLR_YLW}ON{CLR_RST}" if WHALE_ALERTS_ENABLED else "OFF"
-    print(f"  Whale alerts: {whale_status}\n")
+    
+    if AUTO_MODE:
+        # Use hardcoded configuration - no prompts!
+        print("  [AUTO MODE] Using built-in configuration")
+        WHALE_ALERTS_ENABLED = AUTO_CONFIG["whale_alerts"]
+        whale_status = f"{CLR_YLW}ON{CLR_RST}" if WHALE_ALERTS_ENABLED else "OFF"
+        print(f"  Whale alerts: {whale_status}\n")
+        
+        cfg = get_auto_config()
+    else:
+        # Interactive mode - ask user for everything
+        wa = input("  Enable whale alerts? (buy > $2 on Yoso) [y/n, Enter=y]: ").strip().lower()
+        WHALE_ALERTS_ENABLED = (wa != "n")
+        whale_status = f"{CLR_YLW}ON{CLR_RST}" if WHALE_ALERTS_ENABLED else "OFF"
+        print(f"  Whale alerts: {whale_status}\n")
 
-    # Need a temporary browser for Yoso team discovery
-    print("  Starting temp browser for market discovery...")
-    tmp = build_driver()
-    try:
-        cfg = setup_custom(tmp)
-    finally:
-        try: tmp.quit()
-        except Exception: pass
-    if cfg is None:
-        print("  Cancelled.")
-        sys.exit(0)
+        # Need a temporary browser for Yoso team discovery
+        print("  Starting temp browser for market discovery...")
+        tmp = build_driver()
+        try:
+            cfg = setup_custom(tmp)
+        finally:
+            try: tmp.quit()
+            except Exception: pass
+        if cfg is None:
+            print("  Cancelled.")
+            sys.exit(0)
 
     try:
         run_tracker(cfg)
