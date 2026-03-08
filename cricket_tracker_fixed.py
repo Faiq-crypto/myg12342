@@ -712,7 +712,9 @@ def build_driver() -> webdriver.Chrome:
             driver.set_script_timeout(BROWSER_TIMEOUT)
             # Warm-up: confirm renderer alive before navigating to Yoso
             driver.get("about:blank")
-            time.sleep(0.3)   # local: Chrome starts fast
+            # CI environments need more time for Chrome to fully initialize
+            wait_time = 3.0 if os.getenv("AUTO_MODE") == "1" else 0.3
+            time.sleep(wait_time)
             return driver
         except Exception as e:
             msg = str(e).split("\n")[0][:60]
@@ -892,7 +894,9 @@ class YosoPriceFetcher:
                     EC.presence_of_element_located((By.TAG_NAME, "body"))
                 )
                 # Wait for React to finish rendering and fire initial API calls
-                time.sleep(1.5)
+                # CI environments need more time for JavaScript to execute
+                wait_time = 5.0 if os.getenv("AUTO_MODE") == "1" else 1.5
+                time.sleep(wait_time)
                 try:
                     self.driver.execute_script(_INTERCEPT_JS)
                 except Exception:
@@ -1295,6 +1299,11 @@ class YosoPriceFetcher:
         try:
             # ── Load page only once (or after restart) ────────────────────
             self._load_page()
+
+            # ── Extra wait for first few fetches in CI environment ────────
+            # This gives Yoso's JavaScript more time to initialize
+            if self.fetch_count <= 3 and os.getenv("AUTO_MODE") == "1":
+                time.sleep(2.0)
 
             # ── Keep React alive: tiny scroll so browser doesn't throttle ─
             try:
