@@ -22,6 +22,7 @@ jobs:
         run: |
           pip install playwright
           playwright install
+          pip install requests
 
       - name: Run script
         run: python cricket_tracker_fixed.py
